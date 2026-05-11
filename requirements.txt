@@ -8,3 +8,4 @@ openai>=1.0.0
 httpx==0.28.1
 pysqlite3-binary
 protobuf<=3.20.3
+torchvision==0.26.0
