@@ -161,19 +161,19 @@ if modo_seleccionado != st.session_state.app_mode:
 
 if st.session_state.app_mode == "Simulador de Casos":
     if st.session_state.app_state == "inicio":
-    st.info("👋 Bienvenido al Simulador Clínico. Haz clic en el botón para recibir a tu paciente.")
-    if st.button("🩺 Asignarme un Paciente", use_container_width=True):
-        caso = get_random_case()
-        if caso:
-            st.session_state.current_case = caso
-            st.session_state.app_state = "evaluacion"
-            st.session_state.messages = [{"role": "assistant", "content": "De acuerdo con el expediente del paciente. ¿Cuál es su hipótesis diagnóstica? ¿Cuál es el tratamiento sugerido?"}]
-            st.rerun()
-        else:
-            st.error("No se encontraron casos clínicos en la base de datos. Por favor, espera a que termine de ejecutarse el script de ingesta (ingest_spaccc.py).")
+        st.info("👋 Bienvenido al Simulador Clínico. Haz clic en el botón para recibir a tu paciente.")
+        if st.button("🩺 Asignarme un Paciente", use_container_width=True):
+            caso = get_random_case()
+            if caso:
+                st.session_state.current_case = caso
+                st.session_state.app_state = "evaluacion"
+                st.session_state.messages = [{"role": "assistant", "content": "De acuerdo con el expediente del paciente. ¿Cuál es su hipótesis diagnóstica? ¿Cuál es el tratamiento sugerido?"}]
+                st.rerun()
+            else:
+                st.error("No se encontraron casos clínicos en la base de datos. Por favor, espera a que termine de ejecutarse el script de ingesta (ingest_spaccc.py).")
 
-elif st.session_state.app_state == "evaluacion":
-    caso = st.session_state.current_case
+    elif st.session_state.app_state == "evaluacion":
+        caso = st.session_state.current_case
     
     # 1. Panel de Expediente Médico
     with st.expander("📄 **Expediente del Paciente (Activo)**", expanded=True):
