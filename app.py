@@ -29,7 +29,7 @@ def load_rag_system():
     vectorstore = Chroma(persist_directory="./chroma_db_v3", embedding_function=embeddings)
     llm = None # Ya no usamos Ollama local, usamos el GPU remoto en evaluate_user
     
-    # Este retriever buscará SOLO en las guías clínicas (documentos teóricos)
+    # Buscará SOLO en las guías clínicas 
     retriever_guias = vectorstore.as_retriever(
         search_kwargs={"k": 3, "filter": {"tipo": "documento_teorico"}}
     )
@@ -71,13 +71,17 @@ def evaluate_user(diagnostico_usuario, caso_real, contexto_guias):
         "3. Dale una retroalimentación constructiva, profesional y educativa (máximo 2 o 3 párrafos)."
     )
     
-    # --- Conexión al GPU de la UNAM (LM Studio) ---
-    import openai
+    # --- Conexión al GPU del laboragtorio ---
     import base64
     import httpx
     
-    USER = 'rag_user'
-    PASSWORD = 'plm+cuan-ruf*85735e4a.'
+    # IMPORTANTE: Ahora jalamos la contraseña de la caja fuerte de Streamlit
+    try:
+        USER = st.secrets["UNAM_USER"]
+        PASSWORD = st.secrets["UNAM_PASSWORD"]
+    except KeyError:
+        return "⚠️ Error: No se encontraron las contraseñas en los Secretos de Streamlit."
+        
     encoded_credentials = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
     
     http_client = httpx.Client(verify=False)
