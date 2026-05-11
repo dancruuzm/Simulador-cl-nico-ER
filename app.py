@@ -183,60 +183,59 @@ if st.session_state.app_mode == "Simulador de Casos":
 
     elif st.session_state.app_state == "evaluacion":
         caso = st.session_state.current_case
-    
-    # 1. Panel de Expediente Médico
-    with st.expander("📄 **Expediente del Paciente (Activo)**", expanded=True):
-        st.write(caso.page_content)
-        url_img = caso.metadata.get("url_imagen")
-        if url_img and url_img != "nan":
-            try:
-                # Si el sistema detecta que es el placeholder porque no se bajaron las imágenes reales de Kaggle
-                if "fakeimg" in url_img:
-                    st.warning("⚠️ Nota: Las imágenes reales de este paciente no se descargaron para ahorrar espacio. Mostrando radiografía de referencia.")
-                    # Usamos una imagen local genérica real de pulmones
-                    st.image("data/generic_xray.jpg", caption=f"Radiografía Genérica (ID Original: {caso.metadata.get('id_caso', '')})", width=400)
-                else:
-                    st.image(url_img, caption=f"Radiografía ID: {caso.metadata.get('id_caso', '')}", width=400)
-            except Exception as e:
-                st.error("Error al cargar la imagen.")
-        st.caption("🔍 Analiza los datos y escribe tu resolución en el chat.")
-    
-    # 2. Área de Chat
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            
-    user_input = st.chat_input("Escribe tu diagnóstico y tratamiento propuesto...")
-    
-    if user_input:
-        # Registrar respuesta del estudiante
-        st.session_state.messages.append({"role": "human", "content": user_input})
-        with st.chat_message("human"):
-            st.markdown(user_input)
-            
-        # Generar Feedback
-        with st.chat_message("assistant"):
-            with st.spinner("👨‍⚕️ El tutor está evaluando tu respuesta y consultando las normas mexicanas..."):
-                # Buscar en ChromaDB guías sobre la enfermedad real del paciente
-                enfermedad_real = caso.metadata.get('diagnostico_real', '')
-                guias = retriever_guias.invoke(enfermedad_real)
+        
+        # 1. Panel de Expediente Médico
+        with st.expander("📄 **Expediente del Paciente (Activo)**", expanded=True):
+            st.write(caso.page_content)
+            url_img = caso.metadata.get("url_imagen")
+            if url_img and url_img != "nan":
+                try:
+                    # Si el sistema detecta que es el placeholder porque no se bajaron las imágenes reales de Kaggle
+                    if "fakeimg" in url_img:
+                        st.warning("⚠️ Nota: Las imágenes reales de este paciente no se descargaron para ahorrar espacio. Mostrando radiografía de referencia.")
+                        # Usamos una imagen local genérica real de pulmones
+                        st.image("data/generic_xray.jpg", caption=f"Radiografía Genérica (ID Original: {caso.metadata.get('id_caso', '')})", width=400)
+                    else:
+                        st.image(url_img, caption=f"Radiografía ID: {caso.metadata.get('id_caso', '')}", width=400)
+                except Exception as e:
+                    st.error("Error al cargar la imagen.")
+            st.caption("🔍 Analiza los datos y escribe tu resolución en el chat.")
+        
+        # 2. Área de Chat
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
                 
-                # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de 1500 letras de la guía.
-                # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de la guía.
-                texto_guias = guias[0].page_content[:2000] if guias else "Sin guías específicas."
+        user_input = st.chat_input("Escribe tu diagnóstico y tratamiento propuesto...")
+        
+        if user_input:
+            # Registrar respuesta del estudiante
+            st.session_state.messages.append({"role": "human", "content": user_input})
+            with st.chat_message("human"):
+                st.markdown(user_input)
                 
-                # Obtener calificación del LLM
-                feedback = evaluate_user(user_input, caso, texto_guias)
-                st.markdown(feedback)
-                st.session_state.messages.append({"role": "assistant", "content": feedback})
-                
-    # 3. Botón para reiniciar
-    if len(st.session_state.messages) > 1: # Si el usuario ya interactuó
-        st.divider()
-        if st.button("Siguiente Paciente ➔"):
-            st.session_state.app_state = "inicio"
-            st.session_state.current_case = None
-            st.rerun()
+            # Generar Feedback
+            with st.chat_message("assistant"):
+                with st.spinner("👨‍⚕️ El tutor está evaluando tu respuesta y consultando las normas mexicanas..."):
+                    # Buscar en ChromaDB guías sobre la enfermedad real del paciente
+                    enfermedad_real = caso.metadata.get('diagnostico_real', '')
+                    guias = retriever_guias.invoke(enfermedad_real)
+                    
+                    # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de la guía.
+                    texto_guias = guias[0].page_content[:2000] if guias else "Sin guías específicas."
+                    
+                    # Obtener calificación del LLM
+                    feedback = evaluate_user(user_input, caso, texto_guias)
+                    st.markdown(feedback)
+                    st.session_state.messages.append({"role": "assistant", "content": feedback})
+                    
+        # 3. Botón para reiniciar
+        if len(st.session_state.messages) > 1: # Si el usuario ya interactuó
+            st.divider()
+            if st.button("Siguiente Paciente ➔"):
+                st.session_state.app_state = "inicio"
+                st.session_state.current_case = None
+                st.rerun()
 
 elif st.session_state.app_mode == "Consulta":
     st.info("📚 Bienvenido a la Biblioteca Médica. Hazme cualquier pregunta médica o selecciona una opción rápida.")
