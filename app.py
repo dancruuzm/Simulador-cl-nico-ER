@@ -24,9 +24,18 @@ st.title("🩺 Simulador de Casos Clínicos de Enfermedades Respiratorias")
 st.markdown("Pide un paciente, analiza su caso clínico, propón tu diagnóstico y tratamiento, y recibe retroalimentación.")
 
 # --- Inicialización del Sistema RAG ---
+import shutil
+
 def load_rag_system():
+    db_path = "./chroma_db_v3"
+    # Si estamos en Streamlit Cloud (read-only), movemos la DB a la carpeta temporal /tmp
+    if os.path.exists("/mount/src"):
+        db_path = "/tmp/chroma_db_v3"
+        if not os.path.exists(db_path):
+            shutil.copytree("./chroma_db_v3", db_path)
+
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vectorstore = Chroma(persist_directory="./chroma_db_v3", embedding_function=embeddings)
+    vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
     llm = None # Ya no usamos Ollama local, usamos el GPU remoto en evaluate_user
     
     # Buscará SOLO en las guías clínicas 
