@@ -31,8 +31,9 @@ def load_rag_system():
     # Si estamos en Streamlit Cloud (read-only), movemos la DB a la carpeta temporal /tmp
     if os.path.exists("/mount/src"):
         db_path = "/tmp/chroma_db_v3"
-        if not os.path.exists(db_path):
-            shutil.copytree("./chroma_db_v3", db_path)
+        if os.path.exists(db_path):
+            shutil.rmtree(db_path)
+        shutil.copytree("./chroma_db_v3", db_path)
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
