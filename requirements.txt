@@ -7,3 +7,4 @@ sentence-transformers==5.4.1
 openai>=1.0.0
 httpx==0.28.1
 pysqlite3-binary
+protobuf<=3.20.3
