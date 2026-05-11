@@ -1,5 +1,14 @@
 import streamlit as st
 import random
+
+# --- Parche para Streamlit Cloud y ChromaDB ---
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.llms import Ollama
