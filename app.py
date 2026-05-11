@@ -40,12 +40,16 @@ with st.spinner("Cargando motor de simulación y guías médicas..."):
     vectorstore, llm, retriever_guias = load_rag_system()
 
 # --- Manejo de la Máquina de Estados ---
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "simulador" # Modos: simulador, consulta libre
 if "app_state" not in st.session_state:
     st.session_state.app_state = "inicio" # Estados: inicio, evaluacion
 if "current_case" not in st.session_state:
     st.session_state.current_case = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
 
 # --- Funciones ---
 def get_random_case():
@@ -108,9 +112,55 @@ def evaluate_user(diagnostico_usuario, caso_real, contexto_guias):
     except Exception as e:
         return f"Error al conectar con el tutor remoto: {str(e)}"
 
-# --- Interfaz de Pantallas ---
+def answer_general_query(query, contexto_guias):
+    system_prompt = (
+        "Eres un experto médico y asistente de biblioteca de la UNAM.\n"
+        "Se te ha hecho una pregunta médica general. Usa los siguientes fragmentos de las Guías Clínicas Mexicanas para responder.\n\n"
+        "=== GUÍAS CLÍNICAS ===\n"
+        f"{contexto_guias[:3000]}\n\n"
+        "Responde de forma clara, profesional y siempre basándote en las guías provistas."
+    )
+    
+    import base64
+    import httpx
+    import openai
+    try:
+        USER = st.secrets["UNAM_USER"]
+        PASSWORD = st.secrets["UNAM_PASSWORD"]
+    except KeyError:
+        return "⚠️ Error: No se encontraron las contraseñas en los Secretos."
+        
+    encoded_credentials = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
+    client = openai.OpenAI(
+        base_url="https://dinamica1.fciencias.unam.mx/lmstudio/v1/",
+        api_key="lm-studio",
+        default_headers={"Authorization": f"Basic {encoded_credentials}"},
+        http_client=httpx.Client(verify=False)
+    )
+    
+    try:
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query}
+            ],
+            temperature=0.2,
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"Error al consultar al servidor: {str(e)}"
 
-if st.session_state.app_state == "inicio":
+# --- Interfaz de Pantallas ---
+st.sidebar.title("Modo de Uso")
+modo_seleccionado = st.sidebar.radio("Elige una función:", ["Simulador de Casos", "Consulta"])
+
+if modo_seleccionado != st.session_state.app_mode:
+    st.session_state.app_mode = modo_seleccionado
+    st.rerun()
+
+if st.session_state.app_mode == "Simulador de Casos":
+    if st.session_state.app_state == "inicio":
     st.info("👋 Bienvenido al Simulador Clínico. Haz clic en el botón para recibir a tu paciente.")
     if st.button("🩺 Asignarme un Paciente", use_container_width=True):
         caso = get_random_case()
@@ -163,8 +213,8 @@ elif st.session_state.app_state == "evaluacion":
                 guias = retriever_guias.invoke(enfermedad_real)
                 
                 # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de 1500 letras de la guía.
-                # Si le pasamos las miles de palabras enteras de la guía, la computadora colapsa y tarda 15 minutos en responder.
-                texto_guias = guias[0].page_content[:1500] if guias else "Sin guías específicas."
+                # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de la guía.
+                texto_guias = guias[0].page_content[:2000] if guias else "Sin guías específicas."
                 
                 # Obtener calificación del LLM
                 feedback = evaluate_user(user_input, caso, texto_guias)
@@ -178,3 +228,46 @@ elif st.session_state.app_state == "evaluacion":
             st.session_state.app_state = "inicio"
             st.session_state.current_case = None
             st.rerun()
+
+elif st.session_state.app_mode == "Consulta":
+    st.info("📚 Bienvenido a la Biblioteca Médica. Hazme cualquier pregunta médica o selecciona una opción rápida.")
+    
+    # Botones de sugerencias rápidas (Las opciones limitadas)
+    st.write("**Preguntas de acceso rápido (Basadas en las Guías):**")
+    col1, col2, col3 = st.columns(3)
+    query = None
+    
+    if col1.button("Tratamiento Asma", use_container_width=True):
+        query = "¿Cuál es el tratamiento farmacológico escalonado para el Asma?"
+    if col2.button("Diagnóstico EPOC", use_container_width=True):
+        query = "¿Cuáles son los criterios diagnósticos y estudios para EPOC?"
+    if col3.button("Manejo Neumonía", use_container_width=True):
+        query = "¿Cuál es el manejo inicial de la Neumonía Adquirida en la Comunidad?"
+    st.divider()
+
+    # Mostrar historial del chat
+    for msg in st.session_state.chat_messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    # La caja de texto libre original
+    query_input = st.chat_input("... O escribe tu duda médica específica (ej. dosis, complicaciones)...")
+    
+    if query_input:
+        query = query_input
+    
+    if query:
+        st.session_state.chat_messages.append({"role": "human", "content": query})
+        with st.chat_message("human"):
+            st.markdown(query)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("Buscando en las Guías Clínicas..."):
+                # Buscar directamente la pregunta en las guías
+                guias_encontradas = retriever_guias.invoke(query)
+                texto_guias_reunidas = "\n\n".join([g.page_content for g in guias_encontradas])
+                
+                respuesta = answer_general_query(query, texto_guias_reunidas)
+            
+            st.markdown(respuesta)
+            st.session_state.chat_messages.append({"role": "assistant", "content": respuesta})
