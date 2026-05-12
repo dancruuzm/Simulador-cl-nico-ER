@@ -160,10 +160,10 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
 def answer_general_query(query, contexto_guias):
     system_prompt = (
         "Eres un experto médico y asistente de biblioteca de la UNAM.\n"
-        "Se te ha hecho una pregunta médica general. Usa los siguientes fragmentos de las Guías Clínicas Mexicanas para responder.\n\n"
+        "Se te ha hecho una pregunta médica general. Usa los siguientes fragmentos de las Guías Clínicas Mexicanas para responder, pero SI LA RESPUESTA NO ESTÁ EN LOS FRAGMENTOS, usa tu conocimiento médico avanzado para responderla de forma completa y correcta.\n\n"
         "=== GUÍAS CLÍNICAS ===\n"
         f"{contexto_guias[:3000]}\n\n"
-        "Responde de forma clara, profesional y siempre basándote en las guías provistas."
+        "Responde de forma clara, profesional y didáctica."
     )
     
     import base64
