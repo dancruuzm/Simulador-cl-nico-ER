@@ -130,12 +130,29 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
             temperature=0.4,
         )
         raw_response = completion.choices[0].message.content
+        import re
+        import json
         
         # Ocultar el monólogo interno del modelo
+        # 1. Caso de modelo que escupe JSON con tokens internos (ej. modelos tipo Command R+)
+        json_match = re.search(r'\{.*\}', raw_response)
+        if json_match:
+            try:
+                data = json.loads(json_match.group(0))
+                if "response" in data:
+                    return data["response"]
+            except Exception:
+                pass
+                
+        # 2. Caso de bloque explícito [RESPONSE]
         if "[RESPONSE]" in raw_response:
             return raw_response.split("[RESPONSE]")[1].strip()
-        elif "¿" in raw_response and ("We must" in raw_response or "The user" in raw_response):
+            
+        # 3. Caso de monólogo en inglés o tokens que termina en pregunta
+        if "¿" in raw_response and ("We must" in raw_response or "The user" in raw_response or "<|" in raw_response):
             return "¿" + raw_response.split("¿", 1)[1]
+            
+        # Si está limpio, devolverlo tal cual
         return raw_response
     except Exception as e:
         return f"Error al conectar con el tutor remoto: {str(e)}"
