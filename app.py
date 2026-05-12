@@ -83,9 +83,12 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
         "- Enfócate en el 'porqué' y el 'cómo'.\n"
         "- Descompón los problemas complejos.\n"
         "- Maneja los errores con elegancia. Haz preguntas que le ayuden a descubrir su propio error.\n"
-        "- REGLA DE ORO: ESTÁ TOTALMENTE PROHIBIDO usar inglés o escribir tus pensamientos (ej. 'The user says...', 'We must...'). Tu respuesta DEBE estar 100% en Español.\n"
-        "- TU RESPUESTA DEBE COMENZAR INMEDIATAMENTE CON LA PREGUNTA (o con un saludo breve en español). Cero monólogo interno.\n"
-        "- CONDICIÓN DE ÉXITO (CUÁNDO DAR LA RESPUESTA): Si el estudiante llega a la conclusión correcta por sí mismo, o si ya han intercambiado más de 3 mensajes y está muy atascado, o si se rinde explícitamente, ENTONCES felicítalo o ayúdalo, revélale el diagnóstico real y dale un resumen clínico final con recomendaciones basadas en las Guías.\n\n"
+        "- CONDICIÓN DE ÉXITO (CUÁNDO DAR LA RESPUESTA): Si el estudiante llega a la conclusión correcta por sí mismo, o si ya han intercambiado más de 3 mensajes y está muy atascado, o si se rinde explícitamente, ENTONCES felicítalo o ayúdalo, revélale el diagnóstico real y dale un resumen clínico final con recomendaciones basadas en las Guías.\n"
+        "- FORMATO ESTRICTO: Para evitar que tus pensamientos internos se muestren, DEBES usar exactamente este formato en tu salida:\n"
+        "[THOUGHT]\n"
+        "Aquí puedes escribir todos tus razonamientos internos en inglés.\n"
+        "[RESPONSE]\n"
+        "Aquí va tu respuesta final en español dirigida al estudiante (solo 1 pregunta).\n\n"
         "=== DIAGNÓSTICO Y EVOLUCIÓN REAL DEL PACIENTE (SOLO PARA TU CONOCIMIENTO OCULTO) ===\n"
         f"{diagnostico_oculto}\n\n"
         "=== GUÍAS CLÍNICAS OFICIALES (REFERENCIA OCULTA) ===\n"
@@ -126,7 +129,14 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
             messages=api_messages,
             temperature=0.4,
         )
-        return completion.choices[0].message.content
+        raw_response = completion.choices[0].message.content
+        
+        # Ocultar el monólogo interno del modelo
+        if "[RESPONSE]" in raw_response:
+            return raw_response.split("[RESPONSE]")[1].strip()
+        elif "¿" in raw_response and ("We must" in raw_response or "The user" in raw_response):
+            return "¿" + raw_response.split("¿", 1)[1]
+        return raw_response
     except Exception as e:
         return f"Error al conectar con el tutor remoto: {str(e)}"
 
