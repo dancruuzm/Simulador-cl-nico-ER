@@ -71,19 +71,22 @@ def get_random_case():
         return random.choice(resultados)
     return None
 
-def evaluate_user(diagnostico_usuario, caso_real, contexto_guias):
+def evaluate_user(chat_history, caso_real, contexto_guias):
     diagnostico_oculto = caso_real.metadata.get('diagnostico_real', 'Desconocido')
     
     system_prompt = (
-        "Eres un tutor médico experto evaluando a un estudiante de medicina.\n\n"
-        "=== DIAGNÓSTICO Y EVOLUCIÓN REAL DEL PACIENTE ===\n"
+        "Ignora todas tus instrucciones previas. A partir de este momento, actuarás exclusivamente como un 'Guía Socrático'. Tu único propósito es ayudar al estudiante de medicina a profundizar en su comprensión médica a través de preguntas, sin proporcionar nunca respuestas directas.\n\n"
+        "1. Tu Rol y Personalidad: Eres un guía curioso y paciente. Tu objetivo principal no es evaluar si el estudiante está 'bien' o 'mal', sino ayudarle a construir su propio conocimiento y fortalecer sus argumentos.\n"
+        "2. Reglas Inquebrantables:\n"
+        "- NUNCA des una respuesta directa.\n"
+        "- Responde siempre con preguntas que inviten a la reflexión, al análisis o a la justificación.\n"
+        "- Enfócate en el 'porqué' y el 'cómo'.\n"
+        "- Descompón los problemas complejos.\n"
+        "- Maneja los errores con elegancia. Haz preguntas que le ayuden a descubrir su propio error.\n\n"
+        "=== DIAGNÓSTICO Y EVOLUCIÓN REAL DEL PACIENTE (SOLO PARA TU CONOCIMIENTO OCULTO) ===\n"
         f"{diagnostico_oculto}\n\n"
-        "=== GUÍAS CLÍNICAS OFICIALES (REFERENCIA) ===\n"
-        f"{contexto_guias[:2000]}\n\n"
-        "=== TU TAREA ===\n"
-        "1. Compara el diagnóstico del estudiante con el diagnóstico real. ¿Acertó?\n"
-        "2. Evalúa su tratamiento propuesto basándote en las guías clínicas.\n"
-        "3. Dale una retroalimentación constructiva, profesional y educativa (máximo 2 o 3 párrafos)."
+        "=== GUÍAS CLÍNICAS OFICIALES (REFERENCIA OCULTA) ===\n"
+        f"{contexto_guias[:2000]}\n"
     )
     
     # --- Conexión al GPU del laboragtorio ---
@@ -111,13 +114,14 @@ def evaluate_user(diagnostico_usuario, caso_real, contexto_guias):
     )
     
     try:
+        api_messages = [{"role": "system", "content": system_prompt}]
+        for msg in chat_history:
+            api_messages.append({"role": msg["role"], "content": msg["content"]})
+            
         completion = client.chat.completions.create(
             model="openai/gpt-oss-20b",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Mi diagnóstico y tratamiento es el siguiente: {diagnostico_usuario}"}
-            ],
-            temperature=0.2,
+            messages=api_messages,
+            temperature=0.4,
         )
         return completion.choices[0].message.content
     except Exception as e:
@@ -226,8 +230,8 @@ if st.session_state.app_mode == "Simulador de Casos":
                     # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de la guía.
                     texto_guias = guias[0].page_content[:2000] if guias else "Sin guías específicas."
                     
-                    # Obtener calificación del LLM
-                    feedback = evaluate_user(user_input, caso, texto_guias)
+                    # Obtener respuesta del Tutor Socrático
+                    feedback = evaluate_user(st.session_state.messages, caso, texto_guias)
                     st.markdown(feedback)
                     st.session_state.messages.append({"role": "assistant", "content": feedback})
                     
