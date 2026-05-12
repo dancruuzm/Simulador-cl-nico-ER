@@ -216,8 +216,8 @@ if st.session_state.app_mode == "Simulador de Casos":
         
         if user_input:
             # Registrar respuesta del estudiante
-            st.session_state.messages.append({"role": "human", "content": user_input})
-            with st.chat_message("human"):
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with st.chat_message("user"):
                 st.markdown(user_input)
                 
             # Generar Feedback
@@ -271,8 +271,8 @@ elif st.session_state.app_mode == "Consulta":
         query = query_input
     
     if query:
-        st.session_state.chat_messages.append({"role": "human", "content": query})
-        with st.chat_message("human"):
+        st.session_state.chat_messages.append({"role": "user", "content": query})
+        with st.chat_message("user"):
             st.markdown(query)
             
         with st.chat_message("assistant"):
