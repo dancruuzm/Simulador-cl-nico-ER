@@ -87,17 +87,12 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
         "- Escenario A: El estudiante responde correctamente desde el inicio o llega a la respuesta correcta durante el diálogo.\n"
         "- Escenario B: Se alcanza el límite de interacciones (ej. el estudiante ya intentó responder 3 veces sin éxito).\n"
         "- Escenario C: El estudiante dice explícitamente que no sabe, se rinde o pide directamente el resultado.\n\n"
-        "=== FORMATO DE SALIDA OBLIGATORIO ===\n"
-        "Debes estructurar tu respuesta SIEMPRE utilizando las siguientes etiquetas (tu pensamiento NO lo verá el estudiante):\n\n"
-        "[THOUGHT]\n"
-        "- Conteo de interacción actual: (Ej. 1 de 3, 2 de 3, 3 de 3)\n"
-        "- Estado del estudiante: (Analiza si el alumno acertó, si está estancado o si se rindió)\n"
-        "- Razonamiento clínico: (Breve análisis de qué omitió el alumno y cómo orientarlo)\n"
-        "- Siguiente paso: (Decisión de seguir preguntando o aplicar condición de cierre)\n"
-        "[/THOUGHT]\n"
-        "[RESPONSE]\n"
-        "Tu respuesta final dirigida al estudiante en español. Si continúas el debate, incluye solo una pregunta. Si aplicas una Condición de Cierre, entrega el diagnóstico real, retroalimentación y recomendaciones.\n"
-        "[/RESPONSE]\n\n"
+        "=== FORMATO DE SALIDA OBLIGATORIO (JSON) ===\n"
+        "Debes estructurar tu respuesta OBLIGATORIAMENTE como un objeto JSON válido con las siguientes dos claves:\n\n"
+        "{\n"
+        '  "thought": "1 de 3. El alumno acertó/falló... Le falta analizar X... Decido seguir preguntando.",\n'
+        '  "response": "Tu respuesta final dirigida al estudiante en español. Si continúas el debate, incluye solo una pregunta. Si aplicas Condición de Cierre, entrega diagnóstico real y recomendaciones."\n'
+        "}\n\n"
         "=== CONTEXTO DEL CASO Y GUÍAS (INFORMACIÓN OCULTA PARA EL TUTOR) ===\n"
         f"[DIAGNÓSTICO REAL]: {diagnostico_oculto}\n"
         f"[NORMAS Y GUÍAS CLÍNICAS]: {contexto_guias[:3000]}\n"
@@ -143,7 +138,7 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
         
         # Ocultar el monólogo interno del modelo
         # 1. Caso de modelo que escupe JSON con tokens internos (ej. modelos tipo Command R+)
-        json_match = re.search(r'\{.*\}', raw_response)
+        json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         if json_match:
             try:
                 data = json.loads(json_match.group(0))
