@@ -27,6 +27,7 @@ st.markdown("Pide un paciente, analiza su caso clínico, propón tu diagnóstico
 # --- Inicialización del Sistema RAG ---
 import shutil
 
+@st.cache_resource
 def load_rag_system():
     db_path = "./chroma_db_v3"
     # Si estamos en Streamlit Cloud (read-only), movemos la DB a la carpeta temporal /tmp
