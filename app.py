@@ -263,7 +263,6 @@ if st.session_state.app_mode == "Simulador de Casos":
                     enfermedad_real = caso.metadata.get('diagnostico_real', '')
                     guias = retriever_guias.invoke(enfermedad_real)
                     
-                    # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de la guía.
                     texto_guias = guias[0].page_content[:2000] if guias else "Sin guías específicas."
                     
                     # Obtener respuesta del Tutor Socrático
@@ -284,22 +283,20 @@ elif st.session_state.app_mode == "Consulta":
     
     # Botones de sugerencias rápidas (Las opciones limitadas)
     st.write("**Preguntas de acceso rápido (Basadas en las nuevas Guías y NOMs):**")
-    
-    # Primera fila de botones
+
     col1, col2, col3 = st.columns(3)
     query = None
     
     if col1.button("Tratamiento Asma", use_container_width=True):
         query = "¿Cuál es el tratamiento farmacológico escalonado para el Asma?"
-    if col2.button("Diagnóstico EPOC (2025)", use_container_width=True):
+    if col2.button("Diagnóstico EPOC", use_container_width=True):
         query = "¿Cuáles son los criterios diagnósticos y tratamiento para EPOC según la guía GMEPOC 2025?"
     if col3.button("Manejo Neumonía", use_container_width=True):
         query = "¿Cuál es el manejo inicial de la Neumonía Adquirida en la Comunidad?"
         
-    # Segunda fila de botones (Nuevas guías)
     col4, col5, col6 = st.columns(3)
     
-    if col4.button("Tuberculosis (NOM-006)", use_container_width=True):
+    if col4.button("Tuberculosis ", use_container_width=True):
         query = "¿Qué establece la NOM-006-SSA2-2013 para la prevención, diagnóstico y tratamiento de la Tuberculosis?"
     if col5.button("Vigilancia Viral", use_container_width=True):
         query = "¿Cuáles son los lineamientos estandarizados para la vigilancia epidemiológica de enfermedades respiratorias virales?"
