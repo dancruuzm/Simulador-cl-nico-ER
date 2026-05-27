@@ -18,19 +18,18 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import openai
 
-# --- Configuración de página UI ---
+# Configuración de página UI
 st.set_page_config(page_title="Simulador Clínico Enfermedades Respiratorias", page_icon="🩺", layout="wide")
 
 st.title("🩺 Simulador de Casos Clínicos de Enfermedades Respiratorias")
 st.markdown("Pide un paciente, analiza su caso clínico, propón tu diagnóstico y tratamiento, y recibe retroalimentación.")
 
-# --- Inicialización del Sistema RAG ---
+#  Inicialización del  RAG 
 import shutil
 
 @st.cache_resource
 def load_rag_system():
     db_path = "./chroma_db_v3"
-    # Si estamos en Streamlit Cloud (read-only), movemos la DB a la carpeta temporal /tmp
     if os.path.exists("/mount/src"):
         db_path = "/tmp/chroma_db_v3"
         if os.path.exists(db_path):
@@ -39,9 +38,9 @@ def load_rag_system():
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
-    llm = None # Ya no usamos Ollama local, usamos el GPU remoto en evaluate_user
+    llm = None # Ya no usamos Ollama local, usamos el GPU en evaluate_user
     
-    # Buscará SOLO en las guías clínicas 
+# Buscará SOLO en las guías clínicas 
     retriever_guias = vectorstore.as_retriever(
         search_kwargs={"k": 3, "filter": {"tipo": "documento_teorico"}}
     )
@@ -50,8 +49,6 @@ def load_rag_system():
 
 with st.spinner("Cargando motor de simulación y guías médicas..."):
     vectorstore, llm, retriever_guias = load_rag_system()
-
-# --- Manejo de la Máquina de Estados ---
 if "app_mode" not in st.session_state:
     st.session_state.app_mode = "simulador" # Modos: simulador, consulta libre
 if "app_state" not in st.session_state:
@@ -62,11 +59,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
-
-# --- Funciones ---
 def get_random_case():
-    # Seleccionamos un caso aleatorio de nuestra base de datos de casos (tipo = caso_clinico)
-    # Hacemos una búsqueda amplia para traernos varios y escoger uno.
     resultados = vectorstore.similarity_search("paciente", k=50, filter={"tipo": "caso_clinico_real"})
     if resultados:
         return random.choice(resultados)
@@ -101,11 +94,9 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
         f"[NORMAS Y GUÍAS CLÍNICAS]: {contexto_guias[:3000]}\n"
     )
     
-    # --- Conexión al GPU del laboragtorio ---
+# Conexión al GPU 
     import base64
     import httpx
-    
-    # IMPORTANTE: Ahora jalamos la contraseña de la caja fuerte de Streamlit
     try:
         USER = st.secrets["UNAM_USER"]
         PASSWORD = st.secrets["UNAM_PASSWORD"]
@@ -138,9 +129,6 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
         raw_response = completion.choices[0].message.content
         import re
         import json
-        
-        # Ocultar el monólogo interno del modelo
-        # 1. Caso de modelo que escupe JSON con tokens internos (ej. modelos tipo Command R+)
         json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         if json_match:
             try:
@@ -149,16 +137,10 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
                     return data["response"]
             except Exception:
                 pass
-                
-        # 2. Caso de bloque explícito [RESPONSE]
         if "[RESPONSE]" in raw_response:
             return raw_response.split("[RESPONSE]")[1].replace("[/RESPONSE]", "").strip()
-            
-        # 3. Caso de monólogo en inglés o tokens que termina en pregunta
         if "¿" in raw_response and ("We must" in raw_response or "The user" in raw_response or "<|" in raw_response):
             return "¿" + raw_response.split("¿", 1)[1]
-            
-        # Si está limpio, devolverlo tal cual
         return raw_response
     except Exception as e:
         return f"Error al conectar con el tutor remoto: {str(e)}"
@@ -202,7 +184,7 @@ def answer_general_query(query, contexto_guias):
     except Exception as e:
         return f"Error al consultar al servidor: {str(e)}"
 
-# --- Interfaz de Pantallas ---
+# Interfaz de Pantallas 
 st.sidebar.title("Modo de Uso")
 modo_seleccionado = st.sidebar.radio("Elige una función:", ["Simulador de Casos", "Consulta"])
 
@@ -225,8 +207,6 @@ if st.session_state.app_mode == "Simulador de Casos":
 
     elif st.session_state.app_state == "evaluacion":
         caso = st.session_state.current_case
-        
-        # 1. Panel de Expediente Médico
         with st.expander("📄 **Expediente del Paciente (Activo)**", expanded=True):
             st.write(caso.page_content)
             url_img = caso.metadata.get("url_imagen")
