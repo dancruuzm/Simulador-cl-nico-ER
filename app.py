@@ -232,6 +232,30 @@ def answer_general_query(query, contexto_guias):
 st.sidebar.title("Modo de Uso")
 modo_seleccionado = st.sidebar.radio("Elige una función:", ["Simulador de Casos", "Consulta"])
 
+with st.sidebar.expander("🛠️ Debug (Estado de la DB)"):
+    try:
+        total_docs = vectorstore._collection.count()
+        st.write(f"Total de fragmentos en DB: {total_docs}")
+        
+        # Verificar si existe CASO-R1
+        r1_data = vectorstore.get(where={"id_caso": "CASO-R1.txt"})
+        if r1_data and r1_data.get("ids"):
+            st.success(f"✅ CASO-R1 encontrado ({len(r1_data['ids'])} docs)")
+        else:
+            st.error("❌ CASO-R1 NO existe en esta base de datos.")
+            
+        # Imprimir qué casos sí existen
+        casos_reales = vectorstore.get(where={"tipo": "caso_clinico_real"})
+        if casos_reales and casos_reales.get("metadatas"):
+            nombres = list(set([m.get("id_caso") for m in casos_reales["metadatas"] if m]))
+            st.write("Casos reales instalados:", nombres)
+        else:
+            st.error("❌ No hay NINGÚN caso clínico real instalado.")
+            
+    except Exception as e:
+        st.write("Error leyendo DB:", e)
+
+
 if modo_seleccionado != st.session_state.app_mode:
     st.session_state.app_mode = modo_seleccionado
     st.rerun()
