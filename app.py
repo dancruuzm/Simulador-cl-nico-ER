@@ -4,16 +4,25 @@ import os
 import zipfile
 
 # --- Auto-Descompresión de Base de Datos para Streamlit Cloud ---
-if os.path.exists("chroma_db.zip") and not os.path.exists(".db_extracted_v4"):
+if os.path.exists("chroma_db.zip") and not os.path.exists("/tmp/.db_extracted_v5"):
     try:
         import shutil
-        if os.path.exists("chroma_db_v4"):
-            shutil.rmtree("chroma_db_v4")
+        extract_path = "/tmp" if os.path.exists("/mount/src") else "."
+        
+        # Limpiamos si hay rastros viejos en /tmp
+        if os.path.exists(os.path.join(extract_path, "chroma_db_v5")):
+            shutil.rmtree(os.path.join(extract_path, "chroma_db_v5"))
+            
         with zipfile.ZipFile("chroma_db.zip", 'r') as zip_ref:
-            zip_ref.extractall(".")
-        # Renombramos para evadir la caché de Streamlit
-        os.rename("chroma_db_v3", "chroma_db_v4")
-        open(".db_extracted_v4", "w").close()
+            zip_ref.extractall(extract_path)
+            
+        # Renombramos para evadir caché
+        v3_path = os.path.join(extract_path, "chroma_db_v3")
+        v5_path = os.path.join(extract_path, "chroma_db_v5")
+        if os.path.exists(v3_path):
+            os.rename(v3_path, v5_path)
+            
+        open("/tmp/.db_extracted_v5" if os.path.exists("/mount/src") else ".db_extracted_v5", "w").close()
     except Exception as e:
         st.error(f"Error descomprimiendo la base de datos: {e}")
 
@@ -46,13 +55,11 @@ import shutil
 
 @st.cache_resource
 def load_rag_system():
-    db_path = "./chroma_db_v4"
-    # Si estamos en Streamlit Cloud (read-only), movemos la DB a la carpeta temporal /tmp
+    # En la nube usamos directamente la carpeta de /tmp donde extrajimos el ZIP
     if os.path.exists("/mount/src"):
-        db_path = "/tmp/chroma_db_v4"
-        if os.path.exists(db_path):
-            shutil.rmtree(db_path)
-        shutil.copytree("./chroma_db_v4", db_path)
+        db_path = "/tmp/chroma_db_v5"
+    else:
+        db_path = "./chroma_db_v5"
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
