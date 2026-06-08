@@ -1,5 +1,17 @@
 import streamlit as st
 import random
+import os
+import zipfile
+
+# --- Auto-Descompresión de Base de Datos para Streamlit Cloud ---
+if os.path.exists("chroma_db.zip") and not os.path.exists(".db_extracted"):
+    try:
+        with zipfile.ZipFile("chroma_db.zip", 'r') as zip_ref:
+            zip_ref.extractall(".")
+        open(".db_extracted", "w").close()
+    except Exception as e:
+        st.error(f"Error descomprimiendo la base de datos: {e}")
+
 
 # --- Parche para Streamlit Cloud y ChromaDB ---
 try:
