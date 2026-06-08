@@ -4,11 +4,16 @@ import os
 import zipfile
 
 # --- Auto-Descompresión de Base de Datos para Streamlit Cloud ---
-if os.path.exists("chroma_db.zip") and not os.path.exists(".db_extracted"):
+if os.path.exists("chroma_db.zip") and not os.path.exists(".db_extracted_v4"):
     try:
+        import shutil
+        if os.path.exists("chroma_db_v4"):
+            shutil.rmtree("chroma_db_v4")
         with zipfile.ZipFile("chroma_db.zip", 'r') as zip_ref:
             zip_ref.extractall(".")
-        open(".db_extracted", "w").close()
+        # Renombramos para evadir la caché de Streamlit
+        os.rename("chroma_db_v3", "chroma_db_v4")
+        open(".db_extracted_v4", "w").close()
     except Exception as e:
         st.error(f"Error descomprimiendo la base de datos: {e}")
 
@@ -41,13 +46,13 @@ import shutil
 
 @st.cache_resource
 def load_rag_system():
-    db_path = "./chroma_db_v3"
+    db_path = "./chroma_db_v4"
     # Si estamos en Streamlit Cloud (read-only), movemos la DB a la carpeta temporal /tmp
     if os.path.exists("/mount/src"):
-        db_path = "/tmp/chroma_db_v3"
+        db_path = "/tmp/chroma_db_v4"
         if os.path.exists(db_path):
             shutil.rmtree(db_path)
-        shutil.copytree("./chroma_db_v3", db_path)
+        shutil.copytree("./chroma_db_v4", db_path)
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
