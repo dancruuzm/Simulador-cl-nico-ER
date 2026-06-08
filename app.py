@@ -72,9 +72,10 @@ OBJETIVOS_EPOC = {
 }
 
 # --- Funciones ---
-def get_random_case():
-    # Seleccionamos un caso aleatorio de EPOC
-    resultados = vectorstore.similarity_search("EPOC enfermedad pulmonar obstructiva cronica", k=40, filter={"tipo": "caso_clinico_real"})
+def get_random_case(anio_residencia):
+    # Seleccionamos ESTRICTAMENTE el Caso Maestro diseñado para el año del residente
+    filtro_id = f"CASO-{anio_residencia}.txt"
+    resultados = vectorstore.similarity_search("EPOC", k=4, filter={"id_caso": filtro_id})
     if resultados:
         return random.choice(resultados)
     return None
@@ -228,7 +229,7 @@ if st.session_state.app_mode == "Simulador de Casos":
         nivel_residencia = st.selectbox("Selecciona tu año de residencia:", ["R1", "R2", "R3", "R4"])
         
         if st.button("🩺 Asignarme un Paciente", use_container_width=True):
-            caso = get_random_case()
+            caso = get_random_case(nivel_residencia)
             if caso:
                 st.session_state.current_case = caso
                 st.session_state.residency_year = nivel_residencia
