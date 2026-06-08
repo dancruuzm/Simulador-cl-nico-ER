@@ -43,7 +43,7 @@ for archivo in todos_los_archivos:
         # Buscamos que mencione alguna de las palabras clave de EPOC al menos 2 veces
         total_menciones = sum(texto.count(kw) for kw in keywords)
         
-        if total_menciones >= 2:
+        if total_menciones >= 1:
             archivos_resp.append(archivo)
 
 print(f"Se identificaron {len(archivos_resp)} casos relacionados con EPOC.")
@@ -51,63 +51,88 @@ print(f"Se identificaron {len(archivos_resp)} casos relacionados con EPOC.")
 # Procesamos TODOS los casos de EPOC encontrados (eliminamos límite de 10)
 muestra_archivos = archivos_resp
 
-# 2. Configurar la extracción de la historia clínica (Sin usar IA pesada para ahorrar RAM)
-import re
+import streamlit as st
+import openai
+import base64
+import httpx
+import json
 
-def procesar_texto(texto):
-    # Encontramos puntos de corte lógicos para separar la Historia Clínica del Manejo/Tratamiento
-    keywords_corte = ["tratamiento", "evolución", "evolucion", "se prescribe", "se decide", "intervención", "manejo", "alta", "fallece"]
-    texto_lower = texto.lower()
-    
-    mitad = int(len(texto) * 0.4) 
-    corte_idx = len(texto) 
-    
-    for kw in keywords_corte:
-        idx = texto_lower.find(kw, mitad)
-        if idx != -1 and idx < corte_idx:
-            # Buscamos el final de la oración anterior al corte
-            punto_previo = texto.rfind('.', 0, idx)
-            salto_previo = texto.rfind('\n', 0, idx)
-            mejor_corte = max(punto_previo, salto_previo)
-            if mejor_corte != -1 and mejor_corte > mitad:
-                corte_idx = mejor_corte + 1
-    
-    # Si no encuentra ninguna palabra clave clara, corta al 70% como respaldo
-    if corte_idx == len(texto):
-        corte_idx = int(len(texto) * 0.7)
-        ultimo_punto = texto.rfind('.', 0, corte_idx)
-        if ultimo_punto != -1:
-            corte_idx = ultimo_punto + 1
+# Conexión al GPU de la UNAM usando secrets
+try:
+    USER = st.secrets["UNAM_USER"]
+    PASSWORD = st.secrets["UNAM_PASSWORD"]
+    encoded_credentials = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
+    client = openai.OpenAI(
+        base_url="https://dinamica1.fciencias.unam.mx/lmstudio/v1/",
+        api_key="lm-studio",
+        default_headers={"Authorization": f"Basic {encoded_credentials}"},
+        http_client=httpx.Client(verify=False, timeout=60.0)
+    )
+except Exception as e:
+    print(f"Error crítico: No se encontraron las contraseñas en .streamlit/secrets.toml. Por favor configúralas.")
+    sys.exit(1)
+
+def procesar_con_ia(texto_original):
+    prompt = """
+Lee el siguiente caso clínico completo. Analízalo como un experto médico y responde OBLIGATORIAMENTE con un objeto JSON con estas 3 claves:
+{
+  "es_epoc": true o false (Pon true SÓLO si el problema principal o la razón de consulta del paciente es una exacerbación o complicación directa de EPOC/Enfisema/Bronquitis Crónica. Si el EPOC es solo un antecedente y la enfermedad principal es un cólico renal, un infarto o un tumor, pon false),
+  "historia_clinica": "Aquí debes extraer TODA la historia clínica, antecedentes, síntomas actuales, signos vitales y laboratorios/estudios del paciente EXACTAMENTE como viene en el texto original, pero detente justo antes de que el médico empiece a dar el tratamiento o la evolución de alta.",
+  "manejo_real": "Aquí pon el resto del caso: cómo se decidió tratar al paciente, qué medicamentos se le dieron, cómo evolucionó y si fue dado de alta o falleció."
+}
+
+CASO:
+""" + texto_original[:3500]
+
+    try:
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {"role": "system", "content": "Eres un asistente experto en curación de datos médicos. Responde siempre y exclusivamente en JSON validado."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
+        )
+        respuesta_texto = completion.choices[0].message.content
+        # Limpiar respuesta por si el LLM le pone markdown
+        if "```json" in respuesta_texto:
+            respuesta_texto = respuesta_texto.split("```json")[1].split("```")[0]
+        elif "```" in respuesta_texto:
+            respuesta_texto = respuesta_texto.split("```")[1].split("```")[0]
             
-    historia_cruda = texto[:corte_idx].strip()
-    diagnostico_y_manejo = texto[corte_idx:].strip()
-    
-    # Añadimos la nueva leyenda enfocada en manejo clínico
-    historia_final = historia_cruda + "\n\n[...El manejo terapéutico y la evolución médica real de este paciente han sido ocultados para que usted proponga su propio abordaje clínico...]"
-    
-    return historia_final, diagnostico_y_manejo
+        return json.loads(respuesta_texto.strip())
+    except Exception as e:
+        print("Error en la IA:", e)
+        return None
 
 docs = []
-print(f"\nProcesando y curando {len(muestra_archivos)} casos rápidamente...")
+print(f"\nProcesando y curando {len(muestra_archivos)} casos con IA. Esto puede tardar varios minutos...")
 
+casos_exitosos = 0
 for archivo in muestra_archivos:
     with open(os.path.join(corpus_dir, archivo), 'r', encoding='utf-8') as f:
         texto_original = f.read()
     
-    try:
-        historia, diagnostico = procesar_texto(texto_original)
+    print(f"Enviando {archivo} a la IA...")
+    resultado_ia = procesar_con_ia(texto_original)
+    
+    if resultado_ia and resultado_ia.get("es_epoc") == True:
+        historia_cruda = resultado_ia.get("historia_clinica", "")
+        diagnostico = resultado_ia.get("manejo_real", "")
+        
+        historia_final = historia_cruda + "\n\n[...El manejo terapéutico y la evolución médica real de este paciente han sido ocultados para que usted proponga su propio abordaje clínico...]"
         
         metadatos = {
             "id_caso": archivo,
             "tipo": "caso_clinico_real",
-            "diagnostico_real": diagnostico # Guardamos la resolución completa para el Tutor Socrático
+            "diagnostico_real": diagnostico
         }
-        doc = Document(page_content=historia, metadata=metadatos)
+        doc = Document(page_content=historia_final, metadata=metadatos)
         docs.append(doc)
-    except Exception as e:
-        print(f"   [!] Error procesando {archivo}: {e}")
-
-print(f"\nSe generaron {len(docs)} expedientes clínicos de alta calidad.")
+        casos_exitosos += 1
+        print(f" -> APROBADO: Es un caso real de EPOC.")
+    else:
+        print(f" -> DESCARTADO: No es EPOC o es solo un antecedente.")
 
 # 3. Guardar en Base de Datos Vectorial
 if len(docs) > 0:
