@@ -22,7 +22,7 @@ import openai
 st.set_page_config(page_title="Simulador Clínico Enfermedades Respiratorias", page_icon="🩺", layout="wide")
 
 st.title("🩺 Simulador de Casos Clínicos de Enfermedades Respiratorias")
-st.markdown("Pide un paciente, analiza su caso clínico, propón tu diagnóstico y tratamiento, y recibe retroalimentación.")
+st.markdown("Selecciona tu año de residencia, recibe un caso confirmado de EPOC, propón tu plan de manejo clínico y recibe tutoría socrática especializada.")
 
 # --- Inicialización del Sistema RAG ---
 import shutil
@@ -242,11 +242,6 @@ if st.session_state.app_mode == "Simulador de Casos":
         # 1. Panel de Expediente Médico
         with st.expander("📄 **Expediente del Paciente (Activo)**", expanded=True):
             st.write(caso.page_content)
-            # Mostrar radiografía genérica de referencia para ambientar el simulador
-            try:
-                st.image("data/generic_xray.jpg", caption=f"Radiografía de Referencia (Expediente: {caso.metadata.get('id_caso', 'Desconocido')})", width=400)
-            except Exception as e:
-                st.error("Error al cargar la imagen de referencia.")
             st.caption("🔍 Analiza los datos y escribe tu resolución en el chat.")
         
         # 2. Área de Chat
@@ -254,7 +249,7 @@ if st.session_state.app_mode == "Simulador de Casos":
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
                 
-        user_input = st.chat_input("Escribe tu diagnóstico y tratamiento propuesto...")
+        user_input = st.chat_input("Escribe tu plan de abordaje clínico y terapéutico...")
         
         if user_input:
             # Registrar respuesta del estudiante
