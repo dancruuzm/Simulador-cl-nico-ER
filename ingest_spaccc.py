@@ -55,30 +55,37 @@ muestra_archivos = archivos_resp
 import re
 
 def procesar_texto(texto):
-    # Separar en párrafos reales (ignorando saltos de línea vacíos)
-    parrafos = [p.strip() for p in texto.split('\n') if len(p.strip()) > 30]
+    # Encontramos puntos de corte lógicos para separar la Historia Clínica del Manejo/Tratamiento
+    keywords_corte = ["tratamiento", "evolución", "evolucion", "se prescribe", "se decide", "intervención", "manejo", "alta", "fallece"]
+    texto_lower = texto.lower()
     
-    if len(parrafos) <= 2:
-        # Si es un texto continuo sin párrafos, cortamos a la mitad en el último punto
-        mitad = int(len(texto) * 0.6)
-        ultimo_punto = texto.rfind('.', 0, mitad)
-        corte = ultimo_punto + 1 if ultimo_punto != -1 else mitad
-        historia_cruda = texto[:corte]
-        diagnostico = texto[corte:]
-    else:
-        # Si tiene varios párrafos, los diagnósticos siempre están al final.
-        # Nos quedamos con el primer 60% de los párrafos.
-        corte_idx = max(1, int(len(parrafos) * 0.6))
-        historia_cruda = "\n\n".join(parrafos[:corte_idx])
-        diagnostico = "\n\n".join(parrafos[corte_idx:])
-        
-    # CENSURA DE EMERGENCIA: Si el autor del caso mencionó la enfermedad en la historia, la censuramos.
-    # Ej: "Paciente ingresa con diagnóstico de neumonía" -> "Paciente ingresa con diagnóstico de [CENSURADO PARA EXAMEN]"
-    historia_limpia = re.sub(r'(?i)(diagnóstico de|compatible con|sugestivo de)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)(,|\.|\n)', r'\1 [CENSURADO PARA EXAMEN]\3', historia_cruda)
+    mitad = int(len(texto) * 0.4) 
+    corte_idx = len(texto) 
     
-    historia_final = historia_limpia.strip() + "\n\n[...El diagnóstico final y la evolución médica han sido ocultados para tu evaluación...]"
+    for kw in keywords_corte:
+        idx = texto_lower.find(kw, mitad)
+        if idx != -1 and idx < corte_idx:
+            # Buscamos el final de la oración anterior al corte
+            punto_previo = texto.rfind('.', 0, idx)
+            salto_previo = texto.rfind('\n', 0, idx)
+            mejor_corte = max(punto_previo, salto_previo)
+            if mejor_corte != -1 and mejor_corte > mitad:
+                corte_idx = mejor_corte + 1
     
-    return historia_final, diagnostico
+    # Si no encuentra ninguna palabra clave clara, corta al 70% como respaldo
+    if corte_idx == len(texto):
+        corte_idx = int(len(texto) * 0.7)
+        ultimo_punto = texto.rfind('.', 0, corte_idx)
+        if ultimo_punto != -1:
+            corte_idx = ultimo_punto + 1
+            
+    historia_cruda = texto[:corte_idx].strip()
+    diagnostico_y_manejo = texto[corte_idx:].strip()
+    
+    # Añadimos la nueva leyenda enfocada en manejo clínico
+    historia_final = historia_cruda + "\n\n[...El manejo terapéutico y la evolución médica real de este paciente han sido ocultados para que usted proponga su propio abordaje clínico...]"
+    
+    return historia_final, diagnostico_y_manejo
 
 docs = []
 print(f"\nProcesando y curando {len(muestra_archivos)} casos rápidamente...")
