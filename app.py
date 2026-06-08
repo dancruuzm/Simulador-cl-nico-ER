@@ -74,9 +74,19 @@ OBJETIVOS_EPOC = {
 # --- Funciones ---
 def get_random_case(anio_residencia):
     # Seleccionamos ESTRICTAMENTE el Caso Maestro diseñado para el año del residente
-    # Hacemos el filtrado en Python puro para evitar errores de compatibilidad en Streamlit Cloud
     filtro_id = f"CASO-{anio_residencia}.txt"
-    resultados = vectorstore.similarity_search("EPOC", k=10)
+    
+    # 1. Intentar usando el método directo (get) de ChromaDB
+    try:
+        data = vectorstore.get(where={"id_caso": filtro_id})
+        if data and data['documents'] and len(data['documents']) > 0:
+            from langchain.schema import Document
+            return Document(page_content=data['documents'][0], metadata=data['metadatas'][0])
+    except Exception:
+        pass
+
+    # 2. Respaldo: Si get falla por versión, hacemos una búsqueda semántica profunda para saltar las guías clínicas
+    resultados = vectorstore.similarity_search("paciente clínico diagnóstico consulta evolución", k=400)
     casos_filtrados = [doc for doc in resultados if doc.metadata.get("id_caso") == filtro_id]
     
     if casos_filtrados:
