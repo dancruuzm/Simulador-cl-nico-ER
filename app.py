@@ -18,18 +18,19 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import openai
 
-# Configuración de página UI
+# --- Configuración de página UI ---
 st.set_page_config(page_title="Simulador Clínico Enfermedades Respiratorias", page_icon="🩺", layout="wide")
 
 st.title("🩺 Simulador de Casos Clínicos de Enfermedades Respiratorias")
 st.markdown("Pide un paciente, analiza su caso clínico, propón tu diagnóstico y tratamiento, y recibe retroalimentación.")
 
-#  Inicialización del  RAG 
+# --- Inicialización del Sistema RAG ---
 import shutil
 
 @st.cache_resource
 def load_rag_system():
     db_path = "./chroma_db_v3"
+    # Si estamos en Streamlit Cloud (read-only), movemos la DB a la carpeta temporal /tmp
     if os.path.exists("/mount/src"):
         db_path = "/tmp/chroma_db_v3"
         if os.path.exists(db_path):
@@ -38,9 +39,9 @@ def load_rag_system():
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
-    llm = None # Ya no usamos Ollama local, usamos el GPU en evaluate_user
+    llm = None # Ya no usamos Ollama local, usamos el GPU remoto en evaluate_user
     
-# Buscará SOLO en las guías clínicas 
+    # Buscará SOLO en las guías clínicas 
     retriever_guias = vectorstore.as_retriever(
         search_kwargs={"k": 3, "filter": {"tipo": "documento_teorico"}}
     )
@@ -49,6 +50,8 @@ def load_rag_system():
 
 with st.spinner("Cargando motor de simulación y guías médicas..."):
     vectorstore, llm, retriever_guias = load_rag_system()
+
+# --- Manejo de la Máquina de Estados ---
 if "app_mode" not in st.session_state:
     st.session_state.app_mode = "simulador" # Modos: simulador, consulta libre
 if "app_state" not in st.session_state:
@@ -59,44 +62,60 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
+
+# --- Objetivos de Aprendizaje EPOC ---
+OBJETIVOS_EPOC = {
+    "R1": "Diagnóstico (FEV1/FVC < 0.70), identificación de errores en espirometría, cálculo del test de Fagerström para dependencia a la nicotina, prescripción de terapia de reemplazo nicotínico, clasificación en paneles ABE, y reconocimiento de exacerbación según criterios ROMA.",
+    "R2": "Descarte de diagnósticos alternativos (asma, insuficiencia cardíaca), gasometría y gradiente alveolo-arterial, oxigenoterapia domiciliaria, tratamiento no farmacológico (vacunación/rehabilitación), y terapia broncodilatadora inicial (LAMA/LABA/Corticoides) según eosinófilos.",
+    "R3": "Evaluación pronóstica con ÍNDICE BOSEA-90, dosificación de tratamiento médico en exacerbación aguda (corticoides sistémicos 5 días, SABA/SAMA, antibiótico guiado por esputo).",
+    "R4": "Criterios para reducción de volumen o trasplante pulmonar, selección de segunda línea tras triple terapia (roflumilast, ensifentrina), uso de biológicos (mepolizumab, dupilumab)."
+}
+
+# --- Funciones ---
 def get_random_case():
-    resultados = vectorstore.similarity_search("paciente", k=50, filter={"tipo": "caso_clinico_real"})
+    # Seleccionamos un caso aleatorio de EPOC
+    resultados = vectorstore.similarity_search("EPOC enfermedad pulmonar obstructiva cronica", k=40, filter={"tipo": "caso_clinico_real"})
     if resultados:
         return random.choice(resultados)
     return None
 
-def evaluate_user(chat_history, caso_real, contexto_guias):
+def evaluate_user(chat_history, caso_real, contexto_guias, anio_residencia):
     diagnostico_oculto = caso_real.metadata.get('diagnostico_real', 'Desconocido')
+    objetivos = OBJETIVOS_EPOC.get(anio_residencia, "")
     
     system_prompt = (
         "=== IDENTIDAD Y ROL ===\n"
-        "Actúas como un Tutor Médico Socrático experto para estudiantes de medicina. Tu objetivo es guiar al estudiante a resolver un caso clínico de enfermedad respiratoria mediante el razonamiento clínico, utilizando un máximo de 3 interacciones de guía antes de revelar la solución.\n\n"
+        "Actúas como un Tutor Médico Socrático experto. El estudiante YA SABE que el paciente tiene EPOC confirmado. Tu objetivo es guiarlo para que plantee el abordaje clínico y terapéutico correcto, utilizando un máximo de 3 interacciones de guía.\n\n"
+        "=== OBJETIVOS DE EVALUACIÓN OBLIGATORIOS ===\n"
+        f"El estudiante es un residente de {anio_residencia}. DEBES evaluar su propuesta de tratamiento exigiendo estrictamente que cumpla con los siguientes objetivos:\n"
+        f"{objetivos}\n\n"
         "=== REGLAS DE OPERACIÓN ESTRICTAS ===\n"
-        "1. Flujo Conversacional: El estudiante presentará su hipótesis diagnóstica basándose ÚNICAMENTE en la historia clínica que ya leyó. Tu deber es analizar su respuesta y guiarlo.\n"
-        "2. NUNCA PIDAS MÁS DATOS DEL PACIENTE: El estudiante no tiene al paciente enfrente, solo leyó un expediente. No le preguntes '¿Qué otros síntomas notaste?'. Si su diagnóstico es incompleto, pregúntale: '¿En qué datos específicos del expediente te basas para decir eso?' o '¿Cómo justificarías ese diagnóstico con los síntomas presentados?'.\n"
-        "3. Límite Socrático: Tienes permitido un máximo de 3 preguntas de orientación en total. Lleva la cuenta.\n"
-        "4. Regla de Oro: Haz SOLO UNA PREGUNTA a la vez. No bombardees al estudiante.\n"
-        "5. Rol de Guía Activo (Pistas): No te limites a hacer preguntas vacías. Tu trabajo es guiar. Sugiere sutilmente al estudiante que preste atención a detalles clave del expediente que pudo haber pasado por alto (ej. 'Nota que los niveles de leucocitos están elevados, ¿cómo cambia eso tu diagnóstico?', o 'Te sugiero revisar nuevamente los hallazgos de la radiografía...').\n"
-        "6. Tono: Profesional, curioso y de apoyo. Nunca digas 'estás mal'.\n\n"
-        "=== CONDICIONES DE CIERRE (CUÁNDO REVELAR LA RESPUESTA) ===\n"
-        "Debes romper el rol socrático, revelar el diagnóstico real, dar la retroalimentación y el tratamiento correcto basado en las Guías Oficiales SÓLO cuando ocurra uno de los siguientes escenarios:\n"
-        "- Escenario A: El estudiante responde correctamente desde el inicio o llega a la respuesta correcta durante el diálogo.\n"
-        "- Escenario B: Se alcanza el límite de interacciones (ej. el estudiante ya intentó responder 3 veces sin éxito).\n"
-        "- Escenario C: El estudiante dice explícitamente que no sabe, se rinde o pide directamente el resultado.\n\n"
+        "1. Flujo Conversacional: El estudiante propondrá un tratamiento basado en el expediente. Tu deber es analizarlo y guiarlo para que cumpla sus objetivos.\n"
+        "2. NUNCA PIDAS MÁS DATOS FÍSICOS DEL PACIENTE: Evalúa al estudiante basándote en los datos que ya están en el expediente.\n"
+        "3. Retroalimentación Constructiva Obligatoria: Antes de hacer tu siguiente pregunta, DEBES reconocer explícitamente lo que el estudiante propuso bien, y señalar amablemente qué pista u objetivo de tratamiento está omitiendo. NUNCA hagas una pregunta directa sin dar un comentario de guía y retroalimentación primero.\n"
+        "4. Límite Socrático: Tienes un máximo de 3 interacciones. Haz SOLO UNA PREGUNTA a la vez.\n"
+        "5. Tono: Profesional, pedagógico y de mentor.\n\n"
+        "=== CONDICIONES DE CIERRE (CUÁNDO TERMINAR EL CASO) ===\n"
+        "Debes romper el rol socrático y entregar la retroalimentación final integral SÓLO cuando:\n"
+        "- Escenario A: El estudiante logra plantear un abordaje que cumple con todos los objetivos de su nivel de residencia.\n"
+        "- Escenario B: Se alcanza el límite de 3 interacciones y el estudiante no logra completarlo.\n"
+        "- Escenario C: El estudiante se rinde o pide la respuesta directamente.\n\n"
         "=== FORMATO DE SALIDA OBLIGATORIO (JSON) ===\n"
-        "Debes estructurar tu respuesta OBLIGATORIAMENTE como un objeto JSON válido con las siguientes dos claves:\n\n"
+        "Estructura tu respuesta OBLIGATORIAMENTE como JSON:\n"
         "{\n"
-        '  "thought": "1 de 3. El alumno acertó/falló... Le falta analizar X... Decido seguir preguntando.",\n'
-        '  "response": "Tu respuesta final dirigida al estudiante en español. Si continúas el debate, incluye solo una pregunta. Si aplicas Condición de Cierre, entrega diagnóstico real y recomendaciones."\n'
+        '  "thought": "Evalúo si cumplió los objetivos... Le falta la espirometría... Daré retroalimentación positiva de X y preguntaré por Y.",\n'
+        '  "response": "Tu respuesta final (incluyendo la retroalimentación obligatoria + 1 sola pregunta, o la conclusión del caso)."\n'
         "}\n\n"
         "=== CONTEXTO DEL CASO Y GUÍAS (INFORMACIÓN OCULTA PARA EL TUTOR) ===\n"
-        f"[DIAGNÓSTICO REAL]: {diagnostico_oculto}\n"
-        f"[NORMAS Y GUÍAS CLÍNICAS]: {contexto_guias[:3000]}\n"
+        f"[RESOLUCIÓN REAL DEL CASO]: {diagnostico_oculto}\n"
+        f"[GUÍAS OFICIALES (Úsalas para tu retroalimentación)]: {contexto_guias[:3000]}\n"
     )
     
-# Conexión al GPU 
+    # --- Conexión al GPU del laboragtorio ---
     import base64
     import httpx
+    
+    # IMPORTANTE: Ahora jalamos la contraseña de la caja fuerte de Streamlit
     try:
         USER = st.secrets["UNAM_USER"]
         PASSWORD = st.secrets["UNAM_PASSWORD"]
@@ -129,6 +148,9 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
         raw_response = completion.choices[0].message.content
         import re
         import json
+        
+        # Ocultar el monólogo interno del modelo
+        # 1. Caso de modelo que escupe JSON con tokens internos (ej. modelos tipo Command R+)
         json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         if json_match:
             try:
@@ -137,10 +159,16 @@ def evaluate_user(chat_history, caso_real, contexto_guias):
                     return data["response"]
             except Exception:
                 pass
+                
+        # 2. Caso de bloque explícito [RESPONSE]
         if "[RESPONSE]" in raw_response:
             return raw_response.split("[RESPONSE]")[1].replace("[/RESPONSE]", "").strip()
+            
+        # 3. Caso de monólogo en inglés o tokens que termina en pregunta
         if "¿" in raw_response and ("We must" in raw_response or "The user" in raw_response or "<|" in raw_response):
             return "¿" + raw_response.split("¿", 1)[1]
+            
+        # Si está limpio, devolverlo tal cual
         return raw_response
     except Exception as e:
         return f"Error al conectar con el tutor remoto: {str(e)}"
@@ -184,7 +212,7 @@ def answer_general_query(query, contexto_guias):
     except Exception as e:
         return f"Error al consultar al servidor: {str(e)}"
 
-# Interfaz de Pantallas 
+# --- Interfaz de Pantallas ---
 st.sidebar.title("Modo de Uso")
 modo_seleccionado = st.sidebar.radio("Elige una función:", ["Simulador de Casos", "Consulta"])
 
@@ -194,33 +222,31 @@ if modo_seleccionado != st.session_state.app_mode:
 
 if st.session_state.app_mode == "Simulador de Casos":
     if st.session_state.app_state == "inicio":
-        st.info("👋 Bienvenido al Simulador Clínico. Haz clic en el botón para recibir a tu paciente.")
+        st.info("👋 Bienvenido al Simulador Clínico de EPOC.")
+        nivel_residencia = st.selectbox("Selecciona tu año de residencia:", ["R1", "R2", "R3", "R4"])
+        
         if st.button("🩺 Asignarme un Paciente", use_container_width=True):
             caso = get_random_case()
             if caso:
                 st.session_state.current_case = caso
+                st.session_state.residency_year = nivel_residencia
                 st.session_state.app_state = "evaluacion"
-                st.session_state.messages = [{"role": "assistant", "content": "De acuerdo con el expediente del paciente. ¿Cuál es su hipótesis diagnóstica? ¿Cuál es el tratamiento sugerido?"}]
+                st.session_state.messages = [{"role": "assistant", "content": f"De acuerdo con el expediente clínico de este paciente con diagnóstico confirmado de EPOC. Proponga su abordaje clínico y terapéutico de acuerdo a sus objetivos de aprendizaje de {nivel_residencia}."}]
                 st.rerun()
             else:
-                st.error("No se encontraron casos clínicos en la base de datos. Por favor, espera a que termine de ejecutarse el script de ingesta (ingest_spaccc.py).")
+                st.error("No se encontraron casos clínicos de EPOC en la base de datos. Por favor, espera a que termine de ejecutarse el script de ingesta (ingest_spaccc.py).")
 
     elif st.session_state.app_state == "evaluacion":
         caso = st.session_state.current_case
+        
+        # 1. Panel de Expediente Médico
         with st.expander("📄 **Expediente del Paciente (Activo)**", expanded=True):
             st.write(caso.page_content)
-            url_img = caso.metadata.get("url_imagen")
-            if url_img and url_img != "nan":
-                try:
-                    # Si el sistema detecta que es el placeholder porque no se bajaron las imágenes reales de Kaggle
-                    if "fakeimg" in url_img:
-                        st.warning("⚠️ Nota: Las imágenes reales de este paciente no se descargaron para ahorrar espacio. Mostrando radiografía de referencia.")
-                        # Usamos una imagen local genérica real de pulmones
-                        st.image("data/generic_xray.jpg", caption=f"Radiografía Genérica (ID Original: {caso.metadata.get('id_caso', '')})", width=400)
-                    else:
-                        st.image(url_img, caption=f"Radiografía ID: {caso.metadata.get('id_caso', '')}", width=400)
-                except Exception as e:
-                    st.error("Error al cargar la imagen.")
+            # Mostrar radiografía genérica de referencia para ambientar el simulador
+            try:
+                st.image("data/generic_xray.jpg", caption=f"Radiografía de Referencia (Expediente: {caso.metadata.get('id_caso', 'Desconocido')})", width=400)
+            except Exception as e:
+                st.error("Error al cargar la imagen de referencia.")
             st.caption("🔍 Analiza los datos y escribe tu resolución en el chat.")
         
         # 2. Área de Chat
@@ -243,10 +269,12 @@ if st.session_state.app_mode == "Simulador de Casos":
                     enfermedad_real = caso.metadata.get('diagnostico_real', '')
                     guias = retriever_guias.invoke(enfermedad_real)
                     
+                    # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de la guía.
                     texto_guias = guias[0].page_content[:2000] if guias else "Sin guías específicas."
                     
                     # Obtener respuesta del Tutor Socrático
-                    feedback = evaluate_user(st.session_state.messages, caso, texto_guias)
+                    residency_year = st.session_state.get('residency_year', 'R1')
+                    feedback = evaluate_user(st.session_state.messages, caso, texto_guias, residency_year)
                     st.markdown(feedback)
                     st.session_state.messages.append({"role": "assistant", "content": feedback})
                     
@@ -263,20 +291,22 @@ elif st.session_state.app_mode == "Consulta":
     
     # Botones de sugerencias rápidas (Las opciones limitadas)
     st.write("**Preguntas de acceso rápido (Basadas en las nuevas Guías y NOMs):**")
-
+    
+    # Primera fila de botones
     col1, col2, col3 = st.columns(3)
     query = None
     
     if col1.button("Tratamiento Asma", use_container_width=True):
         query = "¿Cuál es el tratamiento farmacológico escalonado para el Asma?"
-    if col2.button("Diagnóstico EPOC", use_container_width=True):
+    if col2.button("Diagnóstico EPOC (2025)", use_container_width=True):
         query = "¿Cuáles son los criterios diagnósticos y tratamiento para EPOC según la guía GMEPOC 2025?"
     if col3.button("Manejo Neumonía", use_container_width=True):
         query = "¿Cuál es el manejo inicial de la Neumonía Adquirida en la Comunidad?"
         
+    # Segunda fila de botones (Nuevas guías)
     col4, col5, col6 = st.columns(3)
     
-    if col4.button("Tuberculosis ", use_container_width=True):
+    if col4.button("Tuberculosis (NOM-006)", use_container_width=True):
         query = "¿Qué establece la NOM-006-SSA2-2013 para la prevención, diagnóstico y tratamiento de la Tuberculosis?"
     if col5.button("Vigilancia Viral", use_container_width=True):
         query = "¿Cuáles son los lineamientos estandarizados para la vigilancia epidemiológica de enfermedades respiratorias virales?"
