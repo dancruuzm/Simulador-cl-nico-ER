@@ -45,6 +45,14 @@ with st.spinner("Cargando motor de simulación y guías médicas..."):
 
 st.sidebar.write(f"📦 Total de documentos en la base de datos: {vectorstore._collection.count()}")
 
+# DEBUG: Mostrar qué casos reales hay en la DB
+try:
+    all_data = vectorstore.get()
+    casos_db = set(m.get('id_caso') for m in all_data['metadatas'] if m and m.get('id_caso'))
+    st.sidebar.write(f"🔍 Casos detectados internamente: {casos_db}")
+except Exception as e:
+    st.sidebar.write(f"Error reading metadatas: {e}")
+
 # --- Manejo de la Máquina de Estados ---
 if "app_mode" not in st.session_state:
     st.session_state.app_mode = "simulador" # Modos: simulador, consulta libre
@@ -66,25 +74,30 @@ OBJETIVOS_EPOC = {
 }
 
 # --- Funciones ---
-def get_random_case(anio_residencia):
-    # Seleccionamos ESTRICTAMENTE el Caso Maestro diseñado para el año del residente
-    filtro_id = f"CASO-{anio_residencia}.txt"
-    
-    # 1. Intentar usando el método directo (get) de ChromaDB
-    try:
-        data = vectorstore.get(where={"id_caso": filtro_id})
-        if data and data['documents'] and len(data['documents']) > 0:
-            from langchain.schema import Document
-            return Document(page_content=data['documents'][0], metadata=data['metadatas'][0])
-    except Exception:
-        pass
+def get_random_case(nivel_residencia):
+    # R1 -> CASO-R1.txt, etc.
+    filtro_id = f"CASO-{nivel_residencia}.txt"
 
-    # 2. Respaldo: Si get falla por versión, hacemos una búsqueda semántica profunda para saltar las guías clínicas
-    resultados = vectorstore.similarity_search("paciente clínico diagnóstico consulta evolución", k=400)
-    casos_filtrados = [doc for doc in resultados if doc.metadata.get("id_caso") == filtro_id]
-    
-    if casos_filtrados:
-        return random.choice(casos_filtrados)
+    # Intentar obtener todos los casos clínicos y filtrar manualmente (A prueba de fallos del filtro where)
+    try:
+        data = vectorstore.get()
+        if data and data['documents'] and len(data['documents']) > 0:
+            for i, meta in enumerate(data['metadatas']):
+                if meta and meta.get("id_caso") == filtro_id:
+                    from langchain.schema import Document
+                    return Document(page_content=data['documents'][i], metadata=meta)
+    except Exception as e:
+        st.error(f"⚠️ Error interno al leer ChromaDB: {e}")
+
+    # Fallback: Búsqueda de similitud con filtro
+    try:
+        resultados = vectorstore.similarity_search("paciente clínico", k=100)
+        casos_filtrados = [doc for doc in resultados if doc.metadata.get("id_caso") == filtro_id]
+        if casos_filtrados:
+            return random.choice(casos_filtrados)
+    except Exception as e:
+        st.error(f"⚠️ Error en similarity_search: {e}")
+        
     return None
 
 def evaluate_user(chat_history, caso_real, contexto_guias, anio_residencia):
