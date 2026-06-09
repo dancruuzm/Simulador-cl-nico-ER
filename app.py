@@ -217,7 +217,7 @@ if modo_seleccionado != st.session_state.app_mode:
 
 if st.session_state.app_mode == "Simulador de Casos":
     if st.session_state.app_state == "inicio":
-        st.info("👋 Bienvenido al Simulador Clínico.")
+        st.info("👋 Bienvenido al Simulador.")
         nivel_residencia = st.selectbox("Selecciona tu año de residencia:", ["R1", "R2", "R3", "R4"])
         
         if st.button("🩺 Asignarme un Paciente", use_container_width=True):
@@ -227,9 +227,9 @@ if st.session_state.app_mode == "Simulador de Casos":
                 st.session_state.residency_year = nivel_residencia
                 st.session_state.app_state = "evaluacion"
                 if nivel_residencia == "R1":
-                   mensaje_inicial = f"De acuerdo con el expediente clínico proporcionado, analice la información, integre un diagnóstico y proponga su abordaje clínico de acuerdo a sus objetivos de aprendizaje de {nivel_residencia}."
+                   mensaje_inicial = f"De acuerdo con el expediente clínico proporcionado, analice la información y escribe un diagnóstico."
                 else:
-                  mensaje_inicial = f"De acuerdo con el expediente clínico de este paciente con diagnóstico confirmado de EPOC. Proponga su abordaje clínico y terapéutico de acuerdo a sus objetivos de aprendizaje de {nivel_residencia}."
+                  mensaje_inicial = f"De acuerdo con el expediente clínico de este paciente con diagnóstico confirmado de EPOC. Proponga su abordaje clínico."
                 st.session_state.messages = [{"role": "assistant", "content": mensaje_inicial}]
     elif st.session_state.app_state == "evaluacion":
         caso = st.session_state.current_case
