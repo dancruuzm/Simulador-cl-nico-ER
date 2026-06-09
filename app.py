@@ -25,7 +25,7 @@ st.markdown("Selecciona tu año de residencia, recibe un caso confirmado de EPOC
 
 # --- Inicialización del Sistema RAG ---
 @st.cache_resource
-def load_rag_system():
+def load_rag_system_v2():
     # La base de datos ahora vive limpia y nativa en la raíz
     db_path = "."
 
@@ -41,7 +41,7 @@ def load_rag_system():
     return vectorstore, llm, retriever_guias
 
 with st.spinner("Cargando motor de simulación y guías médicas..."):
-    vectorstore, llm, retriever_guias = load_rag_system()
+    vectorstore, llm, retriever_guias = load_rag_system_v2()
 
 # --- Manejo de la Máquina de Estados ---
 if "app_mode" not in st.session_state:
