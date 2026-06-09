@@ -43,6 +43,8 @@ def load_rag_system_v5():
 with st.spinner("Cargando motor de simulación y guías médicas..."):
     vectorstore, llm, retriever_guias = load_rag_system_v5()
 
+st.sidebar.write(f"📦 Total de documentos en la base de datos: {vectorstore._collection.count()}")
+
 # --- Manejo de la Máquina de Estados ---
 if "app_mode" not in st.session_state:
     st.session_state.app_mode = "simulador" # Modos: simulador, consulta libre
