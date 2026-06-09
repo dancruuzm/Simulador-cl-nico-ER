@@ -135,7 +135,7 @@ if len(docs) > 0:
     vectorstore = Chroma.from_documents(
         documents=docs,
         embedding=embeddings,
-        persist_directory="."
+        persist_directory="./chroma_db"
     )
     print("\n¡Ingesta del corpus SciELO completada!")
 else:
