@@ -43,16 +43,6 @@ def load_rag_system_v5():
 with st.spinner("Cargando motor de simulación y guías médicas..."):
     vectorstore, llm, retriever_guias = load_rag_system_v5()
 
-st.sidebar.write(f"📦 Total de documentos en la base de datos: {vectorstore._collection.count()}")
-
-# DEBUG: Mostrar qué casos reales hay en la DB
-try:
-    all_data = vectorstore.get()
-    casos_db = set(m.get('id_caso') for m in all_data['metadatas'] if m and m.get('id_caso'))
-    st.sidebar.write(f"🔍 Casos detectados internamente: {casos_db}")
-except Exception as e:
-    st.sidebar.write(f"Error reading metadatas: {e}")
-
 # --- Manejo de la Máquina de Estados ---
 if "app_mode" not in st.session_state:
     st.session_state.app_mode = "simulador" # Modos: simulador, consulta libre
@@ -84,7 +74,7 @@ def get_random_case(nivel_residencia):
         if data and data['documents'] and len(data['documents']) > 0:
             for i, meta in enumerate(data['metadatas']):
                 if meta and meta.get("id_caso") == filtro_id:
-                    from langchain.schema import Document
+                    from langchain_core.documents import Document
                     return Document(page_content=data['documents'][i], metadata=meta)
     except Exception as e:
         st.error(f"⚠️ Error interno al leer ChromaDB: {e}")
