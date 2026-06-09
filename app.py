@@ -18,7 +18,7 @@ import openai
 st.set_page_config(page_title="Simulador Clínico Enfermedades Respiratorias", page_icon="🩺", layout="wide")
 
 st.title("🩺 Simulador de Casos Clínicos de Enfermedades Respiratorias")
-st.markdown("Selecciona tu año de residencia, recibe un caso confirmado de EPOC, propón tu plan de manejo clínico y recibe tutoría socrática especializada.")
+st.markdown("Selecciona tu año de residencia, recibe un caso clínico, analiza la información para proponer tu diagnóstico o plan de manejo, y recibe tutoría socrática especializada.")
 
 @st.cache_resource
 def load_rag_system_v5():
