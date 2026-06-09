@@ -1,8 +1,6 @@
 import streamlit as st
 import random
 import os
-
-# --- Parche para Streamlit Cloud y ChromaDB ---
 try:
     __import__('pysqlite3')
     import sys
@@ -17,23 +15,18 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import openai
 
-# --- Configuración de página UI ---
 st.set_page_config(page_title="Simulador Clínico Enfermedades Respiratorias", page_icon="🩺", layout="wide")
 
 st.title("🩺 Simulador de Casos Clínicos de Enfermedades Respiratorias")
 st.markdown("Selecciona tu año de residencia, recibe un caso confirmado de EPOC, propón tu plan de manejo clínico y recibe tutoría socrática especializada.")
 
-# --- Inicialización del Sistema RAG ---
 @st.cache_resource
 def load_rag_system_v5():
-    # La base de datos vivirá en su propia carpeta para evitar corrupción de índice
     db_path = "./basededatos_final"
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
-    llm = None # Ya no usamos Ollama local, usamos el GPU remoto en evaluate_user
-    
-    # Buscará SOLO en las guías clínicas 
+    llm = None
     retriever_guias = vectorstore.as_retriever(
         search_kwargs={"k": 3, "filter": {"tipo": "documento_teorico"}}
     )
@@ -43,11 +36,10 @@ def load_rag_system_v5():
 with st.spinner("Cargando motor de simulación y guías médicas..."):
     vectorstore, llm, retriever_guias = load_rag_system_v5()
 
-# --- Manejo de la Máquina de Estados ---
 if "app_mode" not in st.session_state:
-    st.session_state.app_mode = "simulador" # Modos: simulador, consulta libre
+    st.session_state.app_mode = "simulador" 
 if "app_state" not in st.session_state:
-    st.session_state.app_state = "inicio" # Estados: inicio, evaluacion
+    st.session_state.app_state = "inicio" 
 if "current_case" not in st.session_state:
     st.session_state.current_case = None
 if "messages" not in st.session_state:
@@ -63,12 +55,9 @@ OBJETIVOS_EPOC = {
     "R4": "Criterios para reducción de volumen o trasplante pulmonar, selección de segunda línea tras triple terapia (roflumilast, ensifentrina), uso de biológicos (mepolizumab, dupilumab)."
 }
 
-# --- Funciones ---
 def get_random_case(nivel_residencia):
-    # R1 -> CASO-R1.txt, etc.
     filtro_id = f"CASO-{nivel_residencia}.txt"
 
-    # Intentar obtener todos los casos clínicos y filtrar manualmente (A prueba de fallos del filtro where)
     try:
         data = vectorstore.get()
         if data and data['documents'] and len(data['documents']) > 0:
@@ -78,8 +67,6 @@ def get_random_case(nivel_residencia):
                     return Document(page_content=data['documents'][i], metadata=meta)
     except Exception as e:
         st.error(f"⚠️ Error interno al leer ChromaDB: {e}")
-
-    # Fallback: Búsqueda de similitud con filtro
     try:
         resultados = vectorstore.similarity_search("paciente clínico", k=100)
         casos_filtrados = [doc for doc in resultados if doc.metadata.get("id_caso") == filtro_id]
@@ -124,11 +111,9 @@ def evaluate_user(chat_history, caso_real, contexto_guias, anio_residencia):
         f"[GUÍAS OFICIALES (Úsalas para tu retroalimentación)]: {contexto_guias[:3000]}\n"
     )
     
-    # --- Conexión al GPU del laboragtorio ---
     import base64
     import httpx
     
-    # IMPORTANTE: Ahora jalamos la contraseña de la caja fuerte de Streamlit
     try:
         USER = st.secrets["UNAM_USER"]
         PASSWORD = st.secrets["UNAM_PASSWORD"]
@@ -162,8 +147,7 @@ def evaluate_user(chat_history, caso_real, contexto_guias, anio_residencia):
         import re
         import json
         
-        # Ocultar el monólogo interno del modelo
-        # 1. Caso de modelo que escupe JSON con tokens internos (ej. modelos tipo Command R+)
+     
         json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         if json_match:
             try:
@@ -172,16 +156,13 @@ def evaluate_user(chat_history, caso_real, contexto_guias, anio_residencia):
                     return data["response"]
             except Exception:
                 pass
-                
-        # 2. Caso de bloque explícito [RESPONSE]
+            
         if "[RESPONSE]" in raw_response:
             return raw_response.split("[RESPONSE]")[1].replace("[/RESPONSE]", "").strip()
             
-        # 3. Caso de monólogo en inglés o tokens que termina en pregunta
         if "¿" in raw_response and ("We must" in raw_response or "The user" in raw_response or "<|" in raw_response):
             return "¿" + raw_response.split("¿", 1)[1]
-            
-        # Si está limpio, devolverlo tal cual
+     
         return raw_response
     except Exception as e:
         return f"Error al conectar con el tutor remoto: {str(e)}"
@@ -224,8 +205,6 @@ def answer_general_query(query, contexto_guias):
         return completion.choices[0].message.content
     except Exception as e:
         return f"Error al consultar al servidor: {str(e)}"
-
-# --- Interfaz de Pantallas ---
 st.sidebar.title("Modo de Uso")
 modo_seleccionado = st.sidebar.radio("Elige una función:", ["Simulador de Casos", "Consulta"])
 
@@ -255,12 +234,10 @@ if st.session_state.app_mode == "Simulador de Casos":
     elif st.session_state.app_state == "evaluacion":
         caso = st.session_state.current_case
         
-        # 1. Panel de Expediente Médico
         with st.expander("📄 **Expediente del Paciente (Activo)**", expanded=True):
             st.write(caso.page_content)
             st.caption("🔍 Analiza los datos y escribe tu resolución en el chat.")
-        
-        # 2. Área de Chat
+
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
@@ -268,29 +245,22 @@ if st.session_state.app_mode == "Simulador de Casos":
         user_input = st.chat_input("Escribe tu plan de abordaje clínico y terapéutico...")
         
         if user_input:
-            # Registrar respuesta del estudiante
             st.session_state.messages.append({"role": "user", "content": user_input})
             with st.chat_message("user"):
                 st.markdown(user_input)
-                
-            # Generar Feedback
+    
             with st.chat_message("assistant"):
                 with st.spinner("👨‍⚕️ El tutor está evaluando tu respuesta y consultando las normas mexicanas..."):
-                    # Buscar en ChromaDB guías sobre la enfermedad real del paciente
                     enfermedad_real = caso.metadata.get('diagnostico_real', '')
                     guias = retriever_guias.invoke(enfermedad_real)
                     
-                    # OPTIMIZACIÓN CRÍTICA: Solo le pasamos a la IA un resumen de la guía.
                     texto_guias = guias[0].page_content[:2000] if guias else "Sin guías específicas."
-                    
-                    # Obtener respuesta del Tutor Socrático
+                
                     residency_year = st.session_state.get('residency_year', 'R1')
                     feedback = evaluate_user(st.session_state.messages, caso, texto_guias, residency_year)
                     st.markdown(feedback)
                     st.session_state.messages.append({"role": "assistant", "content": feedback})
-                    
-        # 3. Botón para reiniciar
-        if len(st.session_state.messages) > 1: # Si el usuario ya interactuó
+        if len(st.session_state.messages) > 1: 
             st.divider()
             if st.button("Siguiente Paciente ➔"):
                 st.session_state.app_state = "inicio"
@@ -300,10 +270,8 @@ if st.session_state.app_mode == "Simulador de Casos":
 elif st.session_state.app_mode == "Consulta":
     st.info("📚 Bienvenido a la Biblioteca Médica. Hazme cualquier pregunta médica o selecciona una opción rápida.")
     
-    # Botones de sugerencias rápidas (Las opciones limitadas)
     st.write("**Preguntas de acceso rápido (Basadas en las nuevas Guías y NOMs):**")
-    
-    # Primera fila de botones
+ 
     col1, col2, col3 = st.columns(3)
     query = None
     
@@ -313,8 +281,6 @@ elif st.session_state.app_mode == "Consulta":
         query = "¿Cuáles son los criterios diagnósticos y tratamiento para EPOC según la guía GMEPOC 2025?"
     if col3.button("Manejo Neumonía", use_container_width=True):
         query = "¿Cuál es el manejo inicial de la Neumonía Adquirida en la Comunidad?"
-        
-    # Segunda fila de botones (Nuevas guías)
     col4, col5, col6 = st.columns(3)
     
     if col4.button("Tuberculosis (NOM-006)", use_container_width=True):
@@ -326,12 +292,10 @@ elif st.session_state.app_mode == "Consulta":
     
     st.divider()
 
-    # Mostrar historial del chat
     for msg in st.session_state.chat_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    # La caja de texto libre original
     query_input = st.chat_input("... O escribe tu duda médica específica (ej. dosis, complicaciones)...")
     
     if query_input:
@@ -344,7 +308,6 @@ elif st.session_state.app_mode == "Consulta":
             
         with st.chat_message("assistant"):
             with st.spinner("Buscando en las Guías Clínicas..."):
-                # Buscar directamente la pregunta en las guías
                 guias_encontradas = retriever_guias.invoke(query)
                 texto_guias_reunidas = "\n\n".join([g.page_content for g in guias_encontradas])
                 
