@@ -226,11 +226,12 @@ if st.session_state.app_mode == "Simulador de Casos":
                 st.session_state.current_case = caso
                 st.session_state.residency_year = nivel_residencia
                 st.session_state.app_state = "evaluacion"
-                st.session_state.messages = [{"role": "assistant", "content": f"De acuerdo con el expediente clínico de este paciente con diagnóstico confirmado de EPOC. Proponga su abordaje clínico y terapéutico de acuerdo a sus objetivos de aprendizaje de {nivel_residencia}."}]
-                st.rerun()
-            else:
-                st.error("No se encontraron casos clínicos de EPOC en la base de datos. Por favor, espera a que termine de ejecutarse el script de ingesta (ingest_spaccc.py).")
+if nivel_residencia == "R1":
+    mensaje_inicial = f"De acuerdo con el expediente clínico proporcionado, analice la información, integre un diagnóstico y proponga su abordaje clínico de acuerdo a sus objetivos de aprendizaje de {nivel_residencia}."
+else:
+    mensaje_inicial = f"De acuerdo con el expediente clínico de este paciente con diagnóstico confirmado de EPOC. Proponga su abordaje clínico y terapéutico de acuerdo a sus objetivos de aprendizaje de {nivel_residencia}."
 
+st.session_state.messages = [{"role": "assistant", "content": mensaje_inicial}]
     elif st.session_state.app_state == "evaluacion":
         caso = st.session_state.current_case
         
