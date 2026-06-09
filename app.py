@@ -66,14 +66,14 @@ def get_random_case(nivel_residencia):
                     from langchain_core.documents import Document
                     return Document(page_content=data['documents'][i], metadata=meta)
     except Exception as e:
-        st.error(f"⚠️ Error interno al leer ChromaDB: {e}")
+        st.error(f" Error interno al leer ChromaDB: {e}")
     try:
         resultados = vectorstore.similarity_search("paciente clínico", k=100)
         casos_filtrados = [doc for doc in resultados if doc.metadata.get("id_caso") == filtro_id]
         if casos_filtrados:
             return random.choice(casos_filtrados)
     except Exception as e:
-        st.error(f"⚠️ Error en similarity_search: {e}")
+        st.error(f" Error en similarity_search: {e}")
         
     return None
 
@@ -118,7 +118,7 @@ def evaluate_user(chat_history, caso_real, contexto_guias, anio_residencia):
         USER = st.secrets["UNAM_USER"]
         PASSWORD = st.secrets["UNAM_PASSWORD"]
     except KeyError:
-        return "⚠️ Error: No se encontraron las contraseñas en los Secretos de Streamlit."
+        return " Error: No se encontraron las contraseñas en los Secretos de Streamlit."
         
     encoded_credentials = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
     
@@ -183,7 +183,7 @@ def answer_general_query(query, contexto_guias):
         USER = st.secrets["UNAM_USER"]
         PASSWORD = st.secrets["UNAM_PASSWORD"]
     except KeyError:
-        return "⚠️ Error: No se encontraron las contraseñas en los Secretos."
+        return " Error: No se encontraron las contraseñas en los Secretos."
         
     encoded_credentials = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
     client = openai.OpenAI(
