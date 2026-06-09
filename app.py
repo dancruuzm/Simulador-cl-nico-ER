@@ -28,13 +28,6 @@ st.markdown("Selecciona tu año de residencia, recibe un caso confirmado de EPOC
 def load_rag_system_v3():
     # La base de datos vivirá en su propia carpeta para evitar corrupción de índice
     db_path = "./chroma_db"
-    zip_path = "chroma_db.zip"
-
-    # Si estamos en Streamlit Cloud y solo existe el zip, lo extraemos
-    if not os.path.exists(db_path) and os.path.exists(zip_path):
-        import zipfile
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(".")
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
