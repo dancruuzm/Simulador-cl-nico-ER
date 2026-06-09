@@ -217,7 +217,7 @@ if modo_seleccionado != st.session_state.app_mode:
 
 if st.session_state.app_mode == "Simulador de Casos":
     if st.session_state.app_state == "inicio":
-        st.info("👋 Bienvenido al Simulador Clínico de EPOC.")
+        st.info("👋 Bienvenido al Simulador Clínico.")
         nivel_residencia = st.selectbox("Selecciona tu año de residencia:", ["R1", "R2", "R3", "R4"])
         
         if st.button("🩺 Asignarme un Paciente", use_container_width=True):
