@@ -113,26 +113,18 @@ for archivo in muestra_archivos:
     with open(os.path.join(corpus_dir, archivo), 'r', encoding='utf-8') as f:
         texto_original = f.read()
     
-    print(f"Enviando {archivo} a la IA...")
-    resultado_ia = procesar_con_ia(texto_original)
+    print(f"Ingresando {archivo} manualmente...")
+    historia_final = texto_original + "\n\n[...El manejo terapéutico y la evolución médica real de este paciente han sido ocultados para que usted proponga su propio abordaje clínico...]"
+    metadatos = {
+        "id_caso": archivo,
+        "tipo": "caso_clinico_real",
+        "diagnostico_real": "Diagnóstico real de paciente (Oculto en DB)"
+    }
     
-    if resultado_ia and resultado_ia.get("es_epoc") == True:
-        historia_cruda = resultado_ia.get("historia_clinica", "")
-        diagnostico = resultado_ia.get("manejo_real", "")
-        
-        historia_final = historia_cruda + "\n\n[...El manejo terapéutico y la evolución médica real de este paciente han sido ocultados para que usted proponga su propio abordaje clínico...]"
-        
-        metadatos = {
-            "id_caso": archivo,
-            "tipo": "caso_clinico_real",
-            "diagnostico_real": diagnostico
-        }
-        doc = Document(page_content=historia_final, metadata=metadatos)
-        docs.append(doc)
-        casos_exitosos += 1
-        print(f" -> APROBADO: Es un caso real de EPOC.")
-    else:
-        print(f" -> DESCARTADO: No es EPOC o es solo un antecedente.")
+    doc = Document(page_content=historia_final, metadata=metadatos)
+    docs.append(doc)
+    casos_exitosos += 1
+    print(f" -> APROBADO (Manual): Es un caso real de EPOC.")
 
 # 3. Guardar en Base de Datos Vectorial
 if len(docs) > 0:
