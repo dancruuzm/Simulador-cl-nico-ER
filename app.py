@@ -224,11 +224,7 @@ def answer_general_query(query, contexto_guias):
 st.sidebar.title("Modo de Uso")
 modo_seleccionado = st.sidebar.radio("Elige una función:", ["Simulador de Casos", "Consulta"])
 
-with st.sidebar.expander("🛠️ Debug (Estado de la DB)"):
-    try:
-        st.write(f"Fragmentos en DB: {vectorstore._collection.count()}")
-    except Exception as e:
-        st.write("Error leyendo DB.")
+
 
 
 if modo_seleccionado != st.session_state.app_mode:
